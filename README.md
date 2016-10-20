@@ -7,8 +7,8 @@ Para saber mais sobre a entrega do trabalho, acessar: [Entrega](ENTREGA.md)
 ## Referências
 
 (Paper) [In Search of an Understandable Consensus Algorithm(Extended Version)](https://raft.github.io/raft.pdf)  
-(Presentation) [Raft: A Consensus Algorithm for Replicated Logs](https://raft.github.io/slides/raftuserstudy2013.pdf)  
-(Animation) [The Secret Lives of Data: Raft - Understandable Distributed Consensus](http://thesecretlivesofdata.com/raft/)  
+(Slide) [Raft: A Consensus Algorithm for Replicated Logs](https://raft.github.io/slides/raftuserstudy2013.pdf)  
+(Animação) [The Secret Lives of Data: Raft - Understandable Distributed Consensus](http://thesecretlivesofdata.com/raft/)  
 (Simulador) [Raft Visualization](https://raft.github.io/)  
 
 

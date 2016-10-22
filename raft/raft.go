@@ -203,6 +203,7 @@ func (raft *Raft) candidateSelect() {
 				log.Println("[CANDIDATE] VoteCount: ", voteCount)
 				if voteCount > len(raft.peers)/2{
 					raft.currentState.Set(leader)
+					log.Println("[CANDIDATE] Elected.")
 					return
 				}
 				break
@@ -289,6 +290,7 @@ func (raft *Raft) leaderSelect() {
 				raft.currentTerm = aet.Term
 				raft.votedFor = 0
 				raft.currentState.Set(follower)
+				return
 			} else{
 				log.Printf("[LEADER] AppendEntry return from '%v' for term '%v'.\n", raft.peers[aet.peerIndex], raft.currentTerm)
 			}

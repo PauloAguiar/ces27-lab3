@@ -101,7 +101,7 @@ func (raft *Raft) loop() {
 	}
 }
 
-// Updates internal state
+// Updates internal state;
 func (raft *Raft) update(state string, term int, votedFor int) {
     if state!=keepState {
         raft.currentState.Set(state)
@@ -193,9 +193,11 @@ func (raft *Raft) candidateSelect() {
 	// Candidates (§5.2):
 	// Increment currentTerm, vote for self
 	raft.currentTerm++
+    majority := len(raft.peers)/2+1
     log.Printf("[CANDIDATE] Running for term %v.\n", raft.currentTerm)
 	raft.votedFor = raft.me
 	voteCount := 1
+    log.Printf("[CANDIDATE] Vote granted by myself for term %v. Vote count: %v. Majority: %v.\n", raft.currentTerm, voteCount, majority)
 	// Reset election timeout
 	raft.resetElectionTimeout()
 	// Send RequestVote RPCs to all other servers
@@ -214,7 +216,6 @@ func (raft *Raft) candidateSelect() {
 			//  MODIFY HERE  //
             if rvr.Term==raft.currentTerm && rvr.VoteGranted {
                 voteCount++
-                majority := len(raft.peers)/2+1
                 log.Printf("[CANDIDATE] Vote granted by peer %v for term %v. Vote count: %v. Majority: %v.\n", rvr.peerIndex, raft.currentTerm, voteCount, majority)
                 if voteCount>=majority { // Check majority;
                     log.Printf("[CANDIDATE] Elected new leader for term %v.\n", raft.currentTerm)
@@ -267,6 +268,8 @@ func (raft *Raft) candidateSelect() {
             if ae.Term>=raft.currentTerm { // New leader in place;
                 if ae.Term>raft.currentTerm {
                     log.Printf("[CANDIDATE] %v is leading a new term %v.\n", ae.LeaderID, ae.Term)
+                } else {
+                    log.Printf("[CANDIDATE] %v was elected for term %v.\n", ae.LeaderID, ae.Term)
                 }
                 log.Printf("[CANDIDATE] Stepping down from term %v.\n", raft.currentTerm)
                 log.Printf("[CANDIDATE] AppendEntry accepted from peer %v for term %v.\n", ae.LeaderID, ae.Term)

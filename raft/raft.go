@@ -110,27 +110,25 @@ func (raft *Raft) followerSelect() {
 			///////////////////
 			//  MODIFY HERE  //
 			
-			if rv.Term > raft.currentTerm {
-				raft.currentTerm = rv.Term
-				raft.votedFor = 0
-			} else if rv.Term == raft.currentTerm {
-				raft.votedFor = 0
-			}
-
 			reply := &RequestVoteReply{
 				Term: raft.currentTerm,
 			}
 
-			if raft.votedFor != 0 {
-				// Denying Vote
-				log.Printf("[FOLLOWER] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
-				reply.VoteGranted = false
-			} else {
+			if rv.Term > raft.currentTerm {
+				raft.currentTerm = rv.Term
+				raft.votedFor = 0
+			}
+
+			if rv.Term == raft.currentTerm && (raft.votedFor == 0 || raft.votedFor == rv.CandidateID) {
 				// Granting Vote
 				log.Printf("[FOLLOWER] Voted for '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
 				reply.VoteGranted = true
 				raft.votedFor = rv.CandidateID
-				raft.resetElectionTimeout()
+				raft.resetElectionTimeout()				
+			} else {
+				// Denying Vote
+				log.Printf("[FOLLOWER] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+				reply.VoteGranted = false
 			}
 
 			rv.replyChan <- reply
@@ -142,15 +140,18 @@ func (raft *Raft) followerSelect() {
 			///////////////////
 			//  MODIFY HERE  //
 			
+			reply := &AppendEntryReply{
+				Term: raft.currentTerm,
+			}
+
 			if ae.Term < raft.currentTerm {
-				return
+				log.Printf("[FOLLOWER] Denied AppendEntry from '%v'. Term: '%v'\n", raft.peers[ae.LeaderID], raft.currentTerm)
+				reply.Success = false
+				ae.replyChan <- reply
+				break
 			} else if ae.Term > raft.currentTerm {
 				raft.currentTerm = ae.Term
 				raft.votedFor    = ae.LeaderID // only to maintain control of who is the leader
-			}
-
-			reply := &AppendEntryReply{
-				Term: raft.currentTerm,
 			}
 
 			log.Printf("[FOLLOWER] Accept AppendEntry from '%v'. Term: '%v'\n", raft.peers[ae.LeaderID], raft.currentTerm)
@@ -240,7 +241,14 @@ func (raft *Raft) candidateSelect() {
 			//  MODIFY HERE  //
 
 			if ae.Term < raft.currentTerm {
-				return
+
+				reply := &AppendEntryReply {
+					Term: raft.currentTerm,
+				}
+
+				reply.Success = false
+				ae.replyChan <- reply
+				break
 			} else if ae.Term > raft.currentTerm {
 				raft.currentTerm = ae.Term
 			}
@@ -322,9 +330,7 @@ func (raft *Raft) leaderSelect() {
 			///////////////////
 			//  MODIFY HERE  //
 			
-			if ae.Term < raft.currentTerm {
-				return
-			} else if ae.Term > raft.currentTerm {
+			if ae.Term > raft.currentTerm {
 				raft.currentTerm = ae.Term
 				raft.votedFor = 0
 
@@ -335,8 +341,15 @@ func (raft *Raft) leaderSelect() {
 				return
 			}
 
-			reply := &AppendEntryReply{
+			reply := &AppendEntryReply {
 				Term: raft.currentTerm,
+			}
+
+			if ae.Term < raft.currentTerm {
+				log.Printf("[LEADER] Denying AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
+				reply.Success = false
+				ae.replyChan <- reply
+				break
 			}
 
 			log.Printf("[LEADER] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])

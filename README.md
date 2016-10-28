@@ -50,35 +50,35 @@ A comunicação entre as instâncias é feita através de duas operações:
 * RequestVote
 
 Enviada pelos candidatos para verificar se eles possuem a maioria dos votos.
-RequestVoteArgs | |
+RequestVoteArgs ||
 --- |:---:
 Term  | candidate's term
 CandidateID | candidate requesting vote
 
 
-RequestVoteReply | |
---- |:---:|
+RequestVoteReply ||
+--- |:---:
 Term | currentTerm, for candidate to update itself
-VoteGranted | rue means candidate received vote           |
+VoteGranted | true means candidate received vote
 
  * AppendEntry  
   
 Enviada pelo líder para as outras instâncias a fim de transmitir informação e servir como Heart beat.
 
-AppendEntryArgs | |
+AppendEntryArgs ||
 --- |:---:
 Term | leader’s term
 LeaderID | so follower can redirect clients
 
 
-AppendEntryReply | |
+AppendEntryReply ||
 --- |:---:
 Term | currentTerm, for leader to update itself
 Success | true if operation matched requirements
 
 A simulação [Leader Election](http://thesecretlivesofdata.com/raft/#election) explica de forma bastante clara a relação entre os estados e as operações para que a eleição aconteça.
 
-Para que a eleição do líder ocorra de forma correta, 8 trechos de código devem ser implementadas:
+Para que a eleição do líder ocorra de forma correta, 8 trechos de código devem ser implementados:
 
 No arquivo *raft/raft.go*:
 
@@ -205,7 +205,7 @@ A lógica para a implementação deve ser a descrita no seguinte sumário:
 	break
 ```
 
-* Algumas subrotinas não devem ser chamadas. Não alterar subrotinas fora do escopo pedido. Incluíndo:
+* Algumas subrotinas não devem ser chamadas. Não alterar subrotinas fora do escopo pedido. Incluindo:
 	* loop
 	* AppendEntry
 	* broadcastAppendEntries

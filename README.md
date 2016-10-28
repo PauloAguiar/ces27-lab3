@@ -50,6 +50,7 @@ A comunicação entre as instâncias é feita através de duas operações:
 * RequestVote
 
 Enviada pelos candidatos para verificar se eles possuem a maioria dos votos.
+
 RequestVoteArgs ||
 --- |:---:
 Term  | candidate's term

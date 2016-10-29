@@ -113,9 +113,21 @@ func (raft *Raft) followerSelect() {
 				Term: raft.currentTerm,
 			}
 
-			log.Printf("[FOLLOWER] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
-
-			reply.VoteGranted = false
+			// Se ainda não votou nessa eleição
+			if rv.Term > raft.currentTerm {
+				// Atualiza turno de eleição
+				raft.currentTerm = rv.Term
+				// Vota no candidato que solicitou voto
+				reply.VoteGranted = true
+				raft.votedFor = rv.CandidateID
+				log.Printf("[FOLLOWER] Vote granted to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+				// Se votou, não precisa se candidatar
+				raft.resetElectionTimeout()
+			} else {
+				// Se já votou na eleição, rejeita candidato
+				reply.VoteGranted = false
+				log.Printf("[FOLLOWER] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+			}
 			rv.replyChan <- reply
 			break
 			// END OF MODIFY //
@@ -124,6 +136,9 @@ func (raft *Raft) followerSelect() {
 		case ae := <-raft.appendEntryChan:
 			///////////////////
 			//  MODIFY HERE  //
+
+			// Heartbeat para o lider
+			raft.resetElectionTimeout()
 			reply := &AppendEntryReply{
 				Term: raft.currentTerm,
 			}
@@ -166,13 +181,23 @@ func (raft *Raft) candidateSelect() {
 			///////////////////
 			//  MODIFY HERE  //
 
+			// Verifica se recebeu o voto
 			if rvr.VoteGranted {
 				log.Printf("[CANDIDATE] Vote granted by '%v'.\n", raft.peers[rvr.peerIndex])
 				voteCount++
 				log.Println("[CANDIDATE] VoteCount: ", voteCount)
-				break
+
+				// Se a maioria votou nele, se torna lider
+				if voteCount > len(raft.peers)/2 {
+					log.Println("[CANDIDATE] is now Elected")
+					raft.resetElectionTimeout()
+					raft.currentState.Set(leader)
+					return
+				}
+			} else {
+				log.Printf("[CANDIDATE] Vote denied by '%v'.\n", raft.peers[rvr.peerIndex])
 			}
-			log.Printf("[CANDIDATE] Vote denied by '%v'.\n", raft.peers[rvr.peerIndex])
+			break
 
 			// END OF MODIFY //
 			///////////////////
@@ -184,16 +209,35 @@ func (raft *Raft) candidateSelect() {
 				Term: raft.currentTerm,
 			}
 
-			log.Printf("[CANDIDATE] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
-			reply.VoteGranted = false
-			rv.replyChan <- reply
-			break
+			// Se tem uma eleição mais nova em curso
+			if rv.Term > raft.currentTerm {
+				// Atualiza turno de eleição
+				raft.currentTerm = rv.Term
+				// Vota no candidato que solicitou voto
+				reply.VoteGranted = true
+				raft.votedFor = rv.CandidateID
+				log.Printf("[CANDIDATE] Vote granted to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+				// Se votou, não precisa se candidatar
+				rv.replyChan <- reply
+				// Volta a ser um seguidor
+				raft.resetElectionTimeout()
+				raft.currentState.Set(follower)
+				return
+			} else {
+				// Se já votou na eleição, rejeita candidato
+				reply.VoteGranted = false
+				log.Printf("[CANDIDATE] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+				rv.replyChan <- reply
+				break
+			}
 			// END OF MODIFY //
 			///////////////////
 
 		case ae := <-raft.appendEntryChan:
 			///////////////////
 			//  MODIFY HERE  //
+
+			// Aceita o novo lider
 			reply := &AppendEntryReply{
 				Term: raft.currentTerm,
 			}
@@ -201,7 +245,11 @@ func (raft *Raft) candidateSelect() {
 			log.Printf("[CANDIDATE] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
 			reply.Success = true
 			ae.replyChan <- reply
-			break
+
+			// Torna-se seguidor do lider
+			raft.resetElectionTimeout()
+			raft.currentState.Set(follower)
+			return
 			// END OF MODIFY //
 			///////////////////
 		}
@@ -234,7 +282,15 @@ func (raft *Raft) leaderSelect() {
 		case aet := <-replyChan:
 			///////////////////
 			//  MODIFY HERE  //
-			_ = aet
+
+			// Resposta positiva do heartbeat
+			if aet.Success {
+				log.Printf("[LEADER] Received Positive AppendEntry from '%v'.\n", raft.peers[aet.peerIndex])
+			} else {
+				// Resposta negativa
+				log.Printf("[LEADER] Received Negative AppendEntry from '%v'.\n", raft.peers[aet.peerIndex])
+			}
+			break
 			// END OF MODIFY //
 			///////////////////
 		case rv := <-raft.requestVoteChan:
@@ -245,9 +301,26 @@ func (raft *Raft) leaderSelect() {
 				Term: raft.currentTerm,
 			}
 
-			log.Printf("[LEADER] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
-			reply.VoteGranted = false
-			rv.replyChan <- reply
+			// Nova eleição mata lider antigo
+			if rv.Term > raft.currentTerm {
+				// Atualiza turno de eleição
+				raft.currentTerm = rv.Term
+				// Vota no candidato que solicitou voto
+				reply.VoteGranted = true
+				raft.votedFor = rv.CandidateID
+				log.Printf("[LEADER] Vote granted to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+				// Se votou, não precisa se candidatar
+				rv.replyChan <- reply
+				// Volta a ser um seguidor
+				raft.resetElectionTimeout()
+				raft.currentState.Set(follower)
+				return
+			} else {
+				// Se a eleição é velha, rejeita candidatos
+				log.Printf("[LEADER] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+				reply.VoteGranted = false
+				rv.replyChan <- reply
+			}
 			break
 
 			// END OF MODIFY //
@@ -260,9 +333,26 @@ func (raft *Raft) leaderSelect() {
 				Term: raft.currentTerm,
 			}
 
-			log.Printf("[LEADER] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
-			reply.Success = true
-			ae.replyChan <- reply
+			// Se existe um lider mais novo, o velho morre
+			if ae.Term > raft.currentTerm {
+				// Atualiza o mandato
+				raft.currentTerm = ae.Term
+
+				// Aceita o novo lider
+				log.Printf("[LEADER] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
+				reply.Success = true
+				ae.replyChan <- reply
+
+				// Volta a ser um seguidor
+				raft.resetElectionTimeout()
+				raft.currentState.Set(follower)
+				return
+			} else {
+				// Se o lider for velho, rejeita-o
+				log.Printf("[LEADER] Rejected AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
+				reply.Success = false
+				ae.replyChan <- reply
+			}
 			break
 			// END OF MODIFY //
 			///////////////////

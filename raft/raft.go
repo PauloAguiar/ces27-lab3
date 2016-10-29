@@ -340,6 +340,7 @@ func (raft *Raft) leaderSelect() {
 			if ae.Term > raft.currentTerm {
 				// Atualiza o mandato
 				raft.currentTerm = ae.Term
+				raft.votedFor = 0
 
 				// Aceita o novo lider
 				log.Printf("[LEADER] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])

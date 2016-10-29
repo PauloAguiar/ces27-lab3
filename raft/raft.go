@@ -220,6 +220,7 @@ func (raft *Raft) candidateSelect() {
 				// Se votou, não precisa se candidatar
 				rv.replyChan <- reply
 				// Volta a ser um seguidor
+				log.Printf("[CANDIDATE] Stepping down.\n")
 				raft.resetElectionTimeout()
 				raft.currentState.Set(follower)
 				return
@@ -247,6 +248,7 @@ func (raft *Raft) candidateSelect() {
 			ae.replyChan <- reply
 
 			// Torna-se seguidor do lider
+			log.Printf("[CANDIDATE] Stepping down.\n")
 			raft.resetElectionTimeout()
 			raft.currentState.Set(follower)
 			return
@@ -312,6 +314,7 @@ func (raft *Raft) leaderSelect() {
 				// Se votou, não precisa se candidatar
 				rv.replyChan <- reply
 				// Volta a ser um seguidor
+				log.Printf("[LEADER] Stepping down.\n")
 				raft.resetElectionTimeout()
 				raft.currentState.Set(follower)
 				return
@@ -337,6 +340,7 @@ func (raft *Raft) leaderSelect() {
 			if ae.Term > raft.currentTerm {
 				// Atualiza o mandato
 				raft.currentTerm = ae.Term
+				raft.votedFor = 0
 
 				// Aceita o novo lider
 				log.Printf("[LEADER] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
@@ -344,6 +348,7 @@ func (raft *Raft) leaderSelect() {
 				ae.replyChan <- reply
 
 				// Volta a ser um seguidor
+				log.Printf("[LEADER] Stepping down.\n")
 				raft.resetElectionTimeout()
 				raft.currentState.Set(follower)
 				return

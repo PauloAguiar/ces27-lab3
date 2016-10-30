@@ -23,8 +23,8 @@ type Raft struct {
 	// currentTerm latest term server has seen (initialized to 0 on first boot, increases monotonically)
 	// votedFor candidateId that received vote in current term (or 0 if none)
 	currentState	*util.ProtectedString
-	currentTerm 	int
-	votedFor    	int
+	currentTerm	int
+	votedFor	int
 
 	// Goroutine communication channels
 	electionTick    <-chan time.Time
@@ -58,7 +58,7 @@ func (raft *Raft) updateStates(votedFor int, term int, state string) {
         raft.currentTerm = term
     }
 
-    if state != updatedState && (state == leader || state == candidate || state == follower) { 
+    if state != updatedState && (state == leader || state == candidate || state == follower) {
         raft.currentState.Set(state)
     }
 }
@@ -159,7 +159,7 @@ func (raft *Raft) followerSelect() {
 
             vote := false
 
-            if rv.Term == raft.currentTerm && (raft.votedFor == rv.CandidateID || raft.votedFor == nullVote) { 
+            if rv.Term == raft.currentTerm && (raft.votedFor == rv.CandidateID || raft.votedFor == nullVote) {
 
                 vote = true
                 raft.updateStates(rv.CandidateID, updatedTerm, updatedState)
@@ -205,7 +205,7 @@ func (raft *Raft) followerSelect() {
             if ae.Term > raft.currentTerm {
 
                 ok = true
-				if currentLeaderID != ae.LeaderID { 
+				if currentLeaderID != ae.LeaderID {
 					log.Printf("[FOLLOWER] Warning! Leader %v has elected to a new term %v.\n", ae.LeaderID, ae.Term)
 				}
 				currentLeaderID = ae.LeaderID
@@ -214,7 +214,7 @@ func (raft *Raft) followerSelect() {
 			} else if ae.Term == raft.currentTerm {
 
                 ok = true
-				if currentLeaderID != ae.LeaderID { 
+				if currentLeaderID != ae.LeaderID {
 					log.Printf("[FOLLOWER] Warning! Leader %v has elected to a new term %v.\n", ae.LeaderID, ae.Term)
 				}
 				currentLeaderID = ae.LeaderID

@@ -107,19 +107,31 @@ func (raft *Raft) followerSelect() {
 			return
 
 		case rv := <-raft.requestVoteChan:
-			///////////////////
-			//  MODIFY HERE  //
+			
 			reply := &RequestVoteReply{
-				Term: raft.currentTerm,
+				//Term: raft.currentTerm,
+				reply.VoteGranted = false
 			}
 
-			log.Printf("[FOLLOWER] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+			
+			if( rv.Term > raft.currentTerm){
+				raft.currentTerm = Term 
+			}
+			else if ( rv.Term == raft.currentTerm){
+				//grant vote and reset election timeout
+				reply.VoteGranted = true
+				raft.resetElectionTimeout()
+			}
 
-			reply.VoteGranted = false
+			if (reply.VoteGranted )
+				log.Printf("[FOLLOWER] Vote granted to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+			
+			else log.Printf("[FOLLOWER] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+			
+			reply.Term = raft.currentTerm
 			rv.replyChan <- reply
 			break
-			// END OF MODIFY //
-			///////////////////
+			
 
 		case ae := <-raft.appendEntryChan:
 			///////////////////

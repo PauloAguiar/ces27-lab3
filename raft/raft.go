@@ -110,24 +110,23 @@ func (raft *Raft) followerSelect() {
 			
 			reply := &RequestVoteReply{
 				//Term: raft.currentTerm,
-				reply.VoteGranted = false
+				VoteGranted: false ,
 			}
 
-			
-			if( rv.Term > raft.currentTerm){
-				raft.currentTerm = Term 
-			}
-			else if ( rv.Term == raft.currentTerm){
+			if ( rv.Term == raft.currentTerm){
 				//grant vote and reset election timeout
 				reply.VoteGranted = true
 				raft.resetElectionTimeout()
+			} else if( rv.Term > raft.currentTerm){
+				raft.currentTerm = rv.Term 
 			}
+			
 
-			if (reply.VoteGranted )
+			if (reply.VoteGranted ){
 				log.Printf("[FOLLOWER] Vote granted to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
-			
-			else log.Printf("[FOLLOWER] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
-			
+			}	else {
+				log.Printf("[FOLLOWER] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+			}
 			reply.Term = raft.currentTerm
 			rv.replyChan <- reply
 			break

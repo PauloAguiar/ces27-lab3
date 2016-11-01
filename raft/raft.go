@@ -241,16 +241,16 @@ func (raft *Raft) candidateSelect() {
 				//Reset election timeout
 			raft.resetElectionTimeout()
 			//return
-
+			/*
 			reply := &AppendEntryReply{
 				Term: raft.currentTerm, // currentTerm, for leader to update itself
 			}
 
 			log.Printf("[CANDIDATE] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
 			reply.Success = true
-			ae.replyChan <- reply
-			//return //se recebeu heartbeat do líder, deixa de ser candidato
-			break
+			ae.replyChan <- reply */
+			return //se recebeu heartbeat do líder, deixa de ser candidato
+			//break
 			
 		}
 	}
@@ -302,14 +302,14 @@ func (raft *Raft) leaderSelect() {
 				raft.currentState.Set(follower)
 				return //(step down if leader of candidate)
 			}
-
+			/*
 			if (reply.VoteGranted ){
 				log.Printf("[LEADER] Vote granted to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
 			}	else {
 				log.Printf("[LEADER] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
 			}
 			reply.Term = raft.currentTerm
-			rv.replyChan <- reply
+			rv.replyChan <- reply*/
 			break
 
 
@@ -329,16 +329,16 @@ func (raft *Raft) leaderSelect() {
 			//Reset election timeout
 			raft.resetElectionTimeout()
 				
-			
+			/*
 			reply := &AppendEntryReply{
 				Term: raft.currentTerm, // currentTerm, for leader to update itself
 			}
 
 			log.Printf("[LEADER] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
 			reply.Success = true
-			ae.replyChan <- reply
-			//return
-			break
+			ae.replyChan <- reply */
+			return
+			//break
 		}
 	}
 }

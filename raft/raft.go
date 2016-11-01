@@ -133,18 +133,22 @@ func (raft *Raft) followerSelect() {
 			
 
 		case ae := <-raft.appendEntryChan:
-			///////////////////
-			//  MODIFY HERE  //
+			
 			reply := &AppendEntryReply{
 				Term: raft.currentTerm,
 			}
-
+			if ( ae.Term < raft.currentTerm ){
+				return
+			}  
+			if ( ae.Term > raft.currentTerm ){
+				raft.currentTerm = ae.Term 
+			}
+			raft.resetElectionTimeout()
 			log.Printf("[FOLLOWER] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
 			reply.Success = true
 			ae.replyChan <- reply
 			break
-			// END OF MODIFY //
-			///////////////////
+			
 		}
 	}
 }

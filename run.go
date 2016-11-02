@@ -6,7 +6,6 @@ import (
 	"log"
 	"math/rand"
 	"time"
-
 	"github.com/pauloaguiar/ces27-lab3/raft"
 )
 

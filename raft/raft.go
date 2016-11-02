@@ -270,7 +270,6 @@ func (raft *Raft) candidateSelect() {
 			ae.replyChan <- reply
 			break
 			// END OF MODIFY //
-			///////////////////
 		}
 	}
 }

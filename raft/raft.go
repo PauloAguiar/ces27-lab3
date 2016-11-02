@@ -112,6 +112,7 @@ func (raft *Raft) followerSelect() {  //raft is the follower
 				raft.currentTerm=rv.Term
 				raft.votedFor=rv.CandidateID
 				grant=true
+				raft.resetElectionTimeout()
 				log.Printf("[FOLLOWER] Vote to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
 			} else {   
 				rv.Term=raft.currentTerm
@@ -135,9 +136,11 @@ func (raft *Raft) followerSelect() {  //raft is the follower
 			var grant bool;
 			if(ae.Term==raft.currentTerm){
 				grant=true;
+				raft.resetElectionTimeout()
 				log.Printf("[FOLLOWER] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
 			}else { 
-				raft.currentTerm=ae.Term
+				raft.currentTerm=ae.Term				
+				raft.votedFor=0
 				grant=false;
 				log.Printf("[FOLLOWER] Deny AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
 			}
@@ -185,7 +188,8 @@ func (raft *Raft) candidateSelect() {
 			//  MODIFY HERE  //
 			//-------------------------------------------------------------
 			if rvr.Term>raft.currentTerm{
-				raft.currentTerm=rvr.Term;
+				raft.currentTerm=rvr.Term;				
+				raft.votedFor=0
 				log.Printf("[CANDIDATE] Stepping down.\n")
 			    raft.currentState.Set(follower)
 			    return
@@ -217,6 +221,7 @@ func (raft *Raft) candidateSelect() {
 				raft.currentTerm=rv.Term
 				raft.votedFor=rv.CandidateID
 				grant=true
+				raft.resetElectionTimeout()
 				log.Printf("[CANDIDATE] Vote to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
 			} else {   
 				rv.Term=raft.currentTerm
@@ -241,9 +246,11 @@ func (raft *Raft) candidateSelect() {
 			var grant bool;
 			if(ae.Term==raft.currentTerm){
 				grant=true;
+				raft.resetElectionTimeout()
 				log.Printf("[CANDIDATE] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
 			}else { 
-				raft.currentTerm=ae.Term
+				raft.currentTerm=ae.Term				
+				raft.votedFor=0
 				grant=false;
 				log.Printf("[CANDIDATE] Deny AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
 			}
@@ -292,7 +299,8 @@ func (raft *Raft) leaderSelect() {
 			//  MODIFY HERE  //
 			//-------------------------------------------------------------
 			if aet.Term>raft.currentTerm{
-				raft.currentTerm=aet.Term;
+				raft.currentTerm=aet.Term;				
+				raft.votedFor=0
 				log.Printf("[LEADER] Stepping down.\n")
 			    raft.currentState.Set(follower)
 			    return
@@ -310,6 +318,7 @@ func (raft *Raft) leaderSelect() {
 				raft.currentTerm=rv.Term
 				raft.votedFor=rv.CandidateID
 				grant=true
+				raft.resetElectionTimeout()
 				log.Printf("[LEADER] Vote to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
 			} else {   
 				rv.Term=raft.currentTerm
@@ -336,9 +345,11 @@ func (raft *Raft) leaderSelect() {
 			var grant bool;
 			if(ae.Term==raft.currentTerm){
 				grant=true;
+				raft.resetElectionTimeout()
 				log.Printf("[LEADER] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
 			}else { 
 				raft.currentTerm=ae.Term
+				raft.votedFor=0
 				grant=false;
 				log.Printf("[LEADER] Deny AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
 			}

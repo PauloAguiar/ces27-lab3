@@ -44,14 +44,11 @@ func NewRaft(peers map[int]string, me int) *Raft {
 
 	raft := &Raft{
 		done: make(chan struct{}),
-
 		peers: peers,
 		me:    me,
-
 		currentState: util.NewProtectedString(),
 		currentTerm:  0,
 		votedFor:     0,
-
 		requestVoteChan: make(chan *RequestVoteArgs, 10*len(peers)),
 		appendEntryChan: make(chan *AppendEntryArgs, 10*len(peers)),
 	}
@@ -96,7 +93,7 @@ func (raft *Raft) loop() {
 
 // followerSelect implements the logic to handle messages from distinct
 // events when in follower state.
-func (raft *Raft) followerSelect() {
+func (raft *Raft) followerSelect() {  //raft is the follower 
 	log.Println("[FOLLOWER] Run Logic.")
 	raft.resetElectionTimeout()
 	for {
@@ -106,30 +103,51 @@ func (raft *Raft) followerSelect() {
 			raft.currentState.Set(candidate)
 			return
 
-		case rv := <-raft.requestVoteChan:
+		case rv := <-raft.requestVoteChan: //candidate requests vote    (rv is the request with Term and CandidateID)
 			///////////////////
 			//  MODIFY HERE  //
+			//-------------------------------------------------------------
+			var grant bool;
+			if rv.Term>raft.currentTerm{
+				raft.currentTerm=rv.Term
+				raft.votedFor=rv.CandidateID
+				grant=true
+				log.Printf("[FOLLOWER] Vote to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+			} else {   
+				rv.Term=raft.currentTerm
+				grant = false
+				log.Printf("[FOLLOWER] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+			}			
+			//-------------------------------------------------------------
 			reply := &RequestVoteReply{
 				Term: raft.currentTerm,
 			}
-
-			log.Printf("[FOLLOWER] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
-
-			reply.VoteGranted = false
+			reply.VoteGranted = grant
 			rv.replyChan <- reply
 			break
 			// END OF MODIFY //
 			///////////////////
 
-		case ae := <-raft.appendEntryChan:
+		case ae := <-raft.appendEntryChan: //It is only the leader sending heartbeat or it is a request for entry replication, the follower answers and the leader asks for entry commit
 			///////////////////
-			//  MODIFY HERE  //
+			//  MODIFY HERE  //			
+			//-------------------------------------------------------------
+			var grant bool;
+			if(ae.Term==raft.currentTerm){
+				grant=true;
+				log.Printf("[FOLLOWER] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
+			}else { 
+				raft.currentTerm=ae.Term
+				grant=false;
+				log.Printf("[FOLLOWER] Deny AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
+			}
+			//-------------------------------------------------------------
+
 			reply := &AppendEntryReply{
 				Term: raft.currentTerm,
 			}
 
-			log.Printf("[FOLLOWER] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
-			reply.Success = true
+			reply.Success = grant
 			ae.replyChan <- reply
 			break
 			// END OF MODIFY //
@@ -162,10 +180,23 @@ func (raft *Raft) candidateSelect() {
 			log.Println("[CANDIDATE] Election timeout.")
 			raft.currentState.Set(candidate)
 			return
-		case rvr := <-replyChan:
+		case rvr := <-replyChan:  //reply arrived in candidate
 			///////////////////
 			//  MODIFY HERE  //
+			//-------------------------------------------------------------
+			if rvr.Term>raft.currentTerm{
+				raft.currentTerm=rvr.Term;
+				log.Printf("[CANDIDATE] Stepping down.\n")
+			    raft.currentState.Set(follower)
+			    return
+			}
+			if voteCount>=len(raft.peers)/2{
+				log.Println("[CANDIDATE] Majority of the votes, becoming leader.")
+				raft.currentState.Set(leader)
+				return
+			}
 
+			//-------------------------------------------------------------			
 			if rvr.VoteGranted {
 				log.Printf("[CANDIDATE] Vote granted by '%v'.\n", raft.peers[rvr.peerIndex])
 				voteCount++
@@ -177,15 +208,27 @@ func (raft *Raft) candidateSelect() {
 			// END OF MODIFY //
 			///////////////////
 
-		case rv := <-raft.requestVoteChan:
+		case rv := <-raft.requestVoteChan: //A vote request rv arrives in candidate
 			///////////////////
 			//  MODIFY HERE  //
+			//-------------------------------------------------------------
+			var grant bool;
+			if rv.Term>raft.currentTerm{
+				raft.currentTerm=rv.Term
+				raft.votedFor=rv.CandidateID
+				grant=true
+				log.Printf("[CANDIDATE] Vote to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+			} else {   
+				rv.Term=raft.currentTerm
+				grant = false
+				log.Printf("[CANDIDATE] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+			}	
+			//-------------------------------------------------------------
 			reply := &RequestVoteReply{
 				Term: raft.currentTerm,
 			}
-
-			log.Printf("[CANDIDATE] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
-			reply.VoteGranted = false
+			//log.Printf("[CANDIDATE] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+			reply.VoteGranted = grant
 			rv.replyChan <- reply
 			break
 			// END OF MODIFY //
@@ -194,12 +237,25 @@ func (raft *Raft) candidateSelect() {
 		case ae := <-raft.appendEntryChan:
 			///////////////////
 			//  MODIFY HERE  //
+			//--------------------------------------------------------------
+			var grant bool;
+			if(ae.Term==raft.currentTerm){
+				grant=true;
+				log.Printf("[CANDIDATE] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
+			}else { 
+				raft.currentTerm=ae.Term
+				grant=false;
+				log.Printf("[CANDIDATE] Deny AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
+			}
+
+			//--------------------------------------------------------------
+
 			reply := &AppendEntryReply{
 				Term: raft.currentTerm,
 			}
 
-			log.Printf("[CANDIDATE] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
-			reply.Success = true
+			//log.Printf("[CANDIDATE] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
+			reply.Success = grant
 			ae.replyChan <- reply
 			break
 			// END OF MODIFY //
@@ -234,19 +290,39 @@ func (raft *Raft) leaderSelect() {
 		case aet := <-replyChan:
 			///////////////////
 			//  MODIFY HERE  //
-			_ = aet
+			//-------------------------------------------------------------
+			if aet.Term>raft.currentTerm{
+				raft.currentTerm=aet.Term;
+				log.Printf("[LEADER] Stepping down.\n")
+			    raft.currentState.Set(follower)
+			    return
+			}
+			//-------------------------------------------------------------
+			//_ = aet
 			// END OF MODIFY //
 			///////////////////
 		case rv := <-raft.requestVoteChan:
 			///////////////////
 			//  MODIFY HERE  //
-
+			//-------------------------------------------------------------
+			var grant bool;
+			if rv.Term>raft.currentTerm{
+				raft.currentTerm=rv.Term
+				raft.votedFor=rv.CandidateID
+				grant=true
+				log.Printf("[LEADER] Vote to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+			} else {   
+				rv.Term=raft.currentTerm
+				grant = false
+				log.Printf("[LEADER] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+			}	
+			//-------------------------------------------------------------
 			reply := &RequestVoteReply{
 				Term: raft.currentTerm,
 			}
 
-			log.Printf("[LEADER] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
-			reply.VoteGranted = false
+			//log.Printf("[LEADER] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+			reply.VoteGranted = grant
 			rv.replyChan <- reply
 			break
 
@@ -256,12 +332,23 @@ func (raft *Raft) leaderSelect() {
 		case ae := <-raft.appendEntryChan:
 			///////////////////
 			//  MODIFY HERE  //
+			//--------------------------------------------------------------
+			var grant bool;
+			if(ae.Term==raft.currentTerm){
+				grant=true;
+				log.Printf("[LEADER] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
+			}else { 
+				raft.currentTerm=ae.Term
+				grant=false;
+				log.Printf("[LEADER] Deny AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
+			}
+			//--------------------------------------------------------------
 			reply := &AppendEntryReply{
 				Term: raft.currentTerm,
 			}
 
-			log.Printf("[LEADER] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
-			reply.Success = true
+			//log.Printf("[LEADER] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
+			reply.Success = grant
 			ae.replyChan <- reply
 			break
 			// END OF MODIFY //

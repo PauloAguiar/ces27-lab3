@@ -117,10 +117,12 @@ func (raft *Raft) followerSelect() {
 				raft.currentTerm = rv.Term
 				reply.VoteGranted = true
 				raft.votedFor = rv.CandidateID
+				raft.resetElectionTimeout()
 			} else if rv.Term==raft.currentTerm {
 				if (raft.votedFor == 0 || raft.votedFor == rv.CandidateID){
 					reply.VoteGranted = true
 					raft.votedFor = rv.CandidateID
+					raft.resetElectionTimeout()
 				} else {
 					reply.VoteGranted = false
 				}			
@@ -130,7 +132,6 @@ func (raft *Raft) followerSelect() {
 			}
 
 			rv.replyChan <- reply
-			raft.resetElectionTimeout()
 			break
 			// END OF MODIFY //
 			///////////////////
@@ -190,7 +191,7 @@ func (raft *Raft) candidateSelect() {
 			///////////////////
 			//  MODIFY HERE  //
 
-			if(rvr.Term>raft.currentTerm){
+			if rvr.Term>raft.currentTerm {
 				raft.currentTerm = rvr.Term
 				raft.currentState.Set(follower)
 				raft.votedFor = 0
@@ -334,7 +335,7 @@ func (raft *Raft) leaderSelect() {
 				break
 			}
 
-			if(raft.currentTerm < ae.Term){
+			if(ae.Term > raft.currentTerm){
 				raft.currentTerm = ae.Term
 				raft.votedFor = 0
 				raft.appendEntryChan <- ae

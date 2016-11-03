@@ -119,11 +119,14 @@ func (raft *Raft) followerSelect() {
 				}
 
 				log.Printf("[FOLLOWER] Vote granted to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
-				
+
 				reply.VoteGranted = true				
 				
 				raft.resetElectionTimeout()
 				rv.replyChan <- reply
+				
+				raft.resetElectionTimeout()
+
 
 			} else {
 				reply := &RequestVoteReply{
@@ -137,7 +140,6 @@ func (raft *Raft) followerSelect() {
 				rv.replyChan <- reply
 			}
 
-			
 			break
 
 		case ae := <-raft.appendEntryChan:

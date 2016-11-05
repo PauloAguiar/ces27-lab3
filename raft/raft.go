@@ -113,9 +113,21 @@ func (raft *Raft) followerSelect() {
 				Term: raft.currentTerm,
 			}
 
-			log.Printf("[FOLLOWER] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+			if rv.Term > raft.currentTerm { // passo 1 do RequestVote RPC
+				raft.currentTerm = rv.Term
+				raft.votedFor = 0
+			}
 
-			reply.VoteGranted = false
+			// passo 2 do RequestVote RPC
+			if rv.Term == raft.currentTerm && (raft.votedFor == 0 || raft.votedFor == rv.CandidateID) {
+				log.Printf("[FOLLOWER] Vote granted to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+				reply.VoteGranted = true
+				raft.resetElectionTimeout()
+			} else { 
+				log.Printf("[FOLLOWER] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+				reply.VoteGranted = false
+			}
+				
 			rv.replyChan <- reply
 			break
 			// END OF MODIFY //
@@ -128,9 +140,25 @@ func (raft *Raft) followerSelect() {
 				Term: raft.currentTerm,
 			}
 
-			log.Printf("[FOLLOWER] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
-			reply.Success = true
+			// passo 1 do AppendEntry RPC
+			if ae.Term < raft.currentTerm {
+				log.Printf("[FOLLOWER] Reject AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
+				reply.Success = false
+			// passo 2 do AppendEntry RPC
+			} else if ae.Term > raft.currentTerm {
+				raft.currentTerm = ae.Term
+				raft.votedFor = 0
+				raft.resetElectionTimeout()
+				log.Printf("[FOLLOWER] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
+				reply.Success = true
+			} else {
+				raft.resetElectionTimeout()	
+				log.Printf("[FOLLOWER] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
+				reply.Success = true
+			}
+			
 			ae.replyChan <- reply
+
 			break
 			// END OF MODIFY //
 			///////////////////
@@ -166,10 +194,19 @@ func (raft *Raft) candidateSelect() {
 			///////////////////
 			//  MODIFY HERE  //
 
+			// contagem de votos
 			if rvr.VoteGranted {
 				log.Printf("[CANDIDATE] Vote granted by '%v'.\n", raft.peers[rvr.peerIndex])
 				voteCount++
 				log.Println("[CANDIDATE] VoteCount: ", voteCount)
+
+				if voteCount > len(raft.peers)/2 {
+					log.Printf("[CANDIDATE] Stepping up. \n")
+					raft.currentState.Set(leader)
+					replyChan <- rvr
+					return
+				}
+
 				break
 			}
 			log.Printf("[CANDIDATE] Vote denied by '%v'.\n", raft.peers[rvr.peerIndex])
@@ -184,10 +221,28 @@ func (raft *Raft) candidateSelect() {
 				Term: raft.currentTerm,
 			}
 
-			log.Printf("[CANDIDATE] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
-			reply.VoteGranted = false
+			// passo 1 do RequestVote RPC
+			if rv.Term > raft.currentTerm {
+				raft.currentTerm = rv.Term
+				raft.votedFor = 0
+				log.Printf("[CANDIDATE] Stepping down. \n")
+				raft.currentState.Set(follower)
+				raft.requestVoteChan <- rv
+				return
+			}
+			// passo 2 do RequestVote RPC
+			if rv.Term == raft.currentTerm && (raft.votedFor == 0 || raft.votedFor == rv.CandidateID) {
+				log.Printf("[CANDIDATE] Vote granted to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+				reply.VoteGranted = true
+				raft.resetElectionTimeout()
+			} else { 
+				log.Printf("[CANDIDATE] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+				reply.VoteGranted = false
+			}
+				
 			rv.replyChan <- reply
 			break
+
 			// END OF MODIFY //
 			///////////////////
 
@@ -197,11 +252,35 @@ func (raft *Raft) candidateSelect() {
 			reply := &AppendEntryReply{
 				Term: raft.currentTerm,
 			}
-
-			log.Printf("[CANDIDATE] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
-			reply.Success = true
+			// passo 1 do AppendEntry RPC
+			if ae.Term < raft.currentTerm {
+				log.Printf("[CANDIDATE] Reject AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
+				reply.Success = false
+			// passo 2 e 3 do AppendEntry RPC
+			} else if ae.Term > raft.currentTerm {
+				raft.currentTerm = ae.Term
+				raft.votedFor = 0
+				raft.resetElectionTimeout()	
+				log.Printf("[CANDIDATE] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
+				reply.Success = true
+				log.Printf("[CANDIDATE] Stepping down. \n")
+				raft.currentState.Set(follower)
+				raft.appendEntryChan <- ae
+				return
+			} else {
+				raft.resetElectionTimeout()	
+				log.Printf("[CANDIDATE] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
+				reply.Success = true
+				log.Printf("[CANDIDATE] Stepping down. \n")
+				raft.currentState.Set(follower)
+				raft.appendEntryChan <- ae
+				return
+			}
+			
 			ae.replyChan <- reply
+
 			break
+
 			// END OF MODIFY //
 			///////////////////
 		}
@@ -234,7 +313,15 @@ func (raft *Raft) leaderSelect() {
 		case aet := <-replyChan:
 			///////////////////
 			//  MODIFY HERE  //
-			_ = aet
+
+			// verifica se houve sucesso
+			if aet.Success == false {
+				log.Printf("[LEADER] Stepping down. \n")
+				raft.currentState.Set(follower)
+				replyChan <- aet
+				return
+			}
+
 			// END OF MODIFY //
 			///////////////////
 		case rv := <-raft.requestVoteChan:
@@ -244,9 +331,25 @@ func (raft *Raft) leaderSelect() {
 			reply := &RequestVoteReply{
 				Term: raft.currentTerm,
 			}
-
-			log.Printf("[LEADER] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
-			reply.VoteGranted = false
+			// passo 1 do RequestVote RPC
+			if rv.Term > raft.currentTerm {
+				raft.currentTerm = rv.Term
+				raft.votedFor = 0
+				log.Printf("[LEADER] Stepping down. \n")
+				raft.currentState.Set(follower)
+				raft.requestVoteChan <- rv
+				return
+			}
+			// passo 2 do RequestVote RPC
+			if rv.Term == raft.currentTerm && (raft.votedFor == 0 || raft.votedFor == rv.CandidateID) {
+				log.Printf("[LEADER] Vote granted to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+				reply.VoteGranted = true
+				raft.resetElectionTimeout()
+			} else { 
+				log.Printf("[LEADER] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+				reply.VoteGranted = false
+			}
+				
 			rv.replyChan <- reply
 			break
 
@@ -259,11 +362,35 @@ func (raft *Raft) leaderSelect() {
 			reply := &AppendEntryReply{
 				Term: raft.currentTerm,
 			}
-
-			log.Printf("[LEADER] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
-			reply.Success = true
+			// passo 1 do AppendEntry RPC
+			if ae.Term < raft.currentTerm {
+				log.Printf("[LEADER] Reject AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
+				reply.Success = false
+			// passo 2 e 3 do AppendEntry RPC
+			} else if ae.Term > raft.currentTerm {
+				raft.currentTerm = ae.Term
+				raft.votedFor = 0
+				raft.resetElectionTimeout()	
+				log.Printf("[LEADER] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
+				reply.Success = true
+				log.Printf("[LEADER] Stepping down. \n")
+				raft.currentState.Set(follower)
+				raft.appendEntryChan <- ae
+				return
+			} else {
+				raft.resetElectionTimeout()	
+				log.Printf("[LEADER] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
+				reply.Success = true
+				log.Printf("[LEADER] Stepping down. \n")
+				raft.currentState.Set(follower)
+				raft.appendEntryChan <- ae
+				return
+			}
+			
 			ae.replyChan <- reply
+
 			break
+		
 			// END OF MODIFY //
 			///////////////////
 		}

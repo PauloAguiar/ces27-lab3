@@ -108,31 +108,60 @@ func (raft *Raft) followerSelect() {
 
 		case rv := <-raft.requestVoteChan:
 			///////////////////
-			//  MODIFY HERE  //
 			reply := &RequestVoteReply{
-				Term: raft.currentTerm,
+				Term: raft.currentTerm,			
 			}
-
+			//Update term
+			if(rv.Term > raft.currentTerm) {
+				raft.currentTerm = rv.Term
+				raft.votedFor = 0
+			}
+			//Vote in current term
+			if(rv.Term == raft.currentTerm ) {
+				//If hasn't voted yet or already voted for candidate
+				if(raft.votedFor == 0 || raft.votedFor == rv.CandidateID) {
+					log.Printf("[FOLLOWER] Vote on '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+					raft.votedFor = rv.CandidateID
+					raft.resetElectionTimeout()
+					reply.VoteGranted = true
+					rv.replyChan <- reply
+					break
+				} /*If already voted this term*/ else {
+					log.Printf("[FOLLOWER] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
+					reply.VoteGranted = false
+					rv.replyChan <- reply
+					break
+				}
+			}
+			//Default case: deny vote
 			log.Printf("[FOLLOWER] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
 
 			reply.VoteGranted = false
 			rv.replyChan <- reply
 			break
-			// END OF MODIFY //
 			///////////////////
 
 		case ae := <-raft.appendEntryChan:
 			///////////////////
-			//  MODIFY HERE  //
 			reply := &AppendEntryReply{
 				Term: raft.currentTerm,
 			}
-
+			//Ignores request from old leaders
+			if(ae.Term < raft.currentTerm) {
+				break
+			}
+			//If new term is detected, updates current term
+			if(ae.Term > raft.currentTerm) {
+				ae.Term = raft.currentTerm
+				reply.Term = ae.Term
+				raft.votedFor = 0
+			}
+			//Accept the append entry from the leader
+			raft.resetElectionTimeout()
 			log.Printf("[FOLLOWER] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
 			reply.Success = true
 			ae.replyChan <- reply
 			break
-			// END OF MODIFY //
 			///////////////////
 		}
 	}
@@ -164,45 +193,62 @@ func (raft *Raft) candidateSelect() {
 			return
 		case rvr := <-replyChan:
 			///////////////////
-			//  MODIFY HERE  //
 
+			//If receives a vote, updates the vote count
 			if rvr.VoteGranted {
 				log.Printf("[CANDIDATE] Vote granted by '%v'.\n", raft.peers[rvr.peerIndex])
 				voteCount++
 				log.Println("[CANDIDATE] VoteCount: ", voteCount)
+				//If receives a majority vote, become leader
+				if(voteCount > len(raft.peers)/2) {
+					log.Println("[CANDIDATE] Elected.")
+					raft.currentState.Set(leader)
+					return
+				}
 				break
 			}
+			//If doesn't receive vote, do nothing
 			log.Printf("[CANDIDATE] Vote denied by '%v'.\n", raft.peers[rvr.peerIndex])
 
-			// END OF MODIFY //
 			///////////////////
 
 		case rv := <-raft.requestVoteChan:
 			///////////////////
-			//  MODIFY HERE  //
+			
 			reply := &RequestVoteReply{
 				Term: raft.currentTerm,
 			}
 
+			//If the candidate discovers new election, step down
+			if(rv.Term > raft.currentTerm) {
+				log.Printf("[CANDIDATE] Stepping down.\n")
+				raft.currentState.Set(follower)
+				raft.requestVoteChan <- rv
+				return
+			}
+
+			//If still in current election, deny vote to other candidate
 			log.Printf("[CANDIDATE] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
 			reply.VoteGranted = false
 			rv.replyChan <- reply
 			break
-			// END OF MODIFY //
+			
 			///////////////////
 
 		case ae := <-raft.appendEntryChan:
 			///////////////////
-			//  MODIFY HERE  //
-			reply := &AppendEntryReply{
-				Term: raft.currentTerm,
+
+			//If receives append entry from new leader in this or future term, step down
+			if(ae.Term >= raft.currentTerm) {
+				log.Printf("[CANDIDATE] Stepping down.\n")
+				raft.currentState.Set(follower)
+				raft.appendEntryChan <- ae
+				return
 			}
 
-			log.Printf("[CANDIDATE] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
-			reply.Success = true
-			ae.replyChan <- reply
+			//If receives an append entry from old leader, ignores it
 			break
-			// END OF MODIFY //
+			
 			///////////////////
 		}
 	}
@@ -233,38 +279,49 @@ func (raft *Raft) leaderSelect() {
 			raft.broadcastAppendEntries(replyChan)
 		case aet := <-replyChan:
 			///////////////////
-			//  MODIFY HERE  //
+			//Receive heartbeat answer, do nothing
 			_ = aet
-			// END OF MODIFY //
 			///////////////////
 		case rv := <-raft.requestVoteChan:
 			///////////////////
-			//  MODIFY HERE  //
+			//If the leader discovers new election, step down 
+			if (rv.Term > raft.currentTerm) {
+				log.Printf("[LEADER] Stepping down.\n")
+				raft.currentState.Set(follower)
+				raft.requestVoteChan <- rv
+				return
+			}
 
 			reply := &RequestVoteReply{
 				Term: raft.currentTerm,
 			}
-
+			//If still in current term, deny vote to other candidates
 			log.Printf("[LEADER] Vote denied to '%v' for term '%v'.\n", raft.peers[rv.CandidateID], raft.currentTerm)
 			reply.VoteGranted = false
 			rv.replyChan <- reply
 			break
 
-			// END OF MODIFY //
 			///////////////////
 
 		case ae := <-raft.appendEntryChan:
 			///////////////////
-			//  MODIFY HERE  //
+			//If a new leader is discovered, step down
+			if (ae.Term > raft.currentTerm) {
+				log.Printf("[LEADER] Stepping down.\n")
+				raft.currentState.Set(follower)
+				raft.appendEntryChan <- ae
+				return
+			}
+
 			reply := &AppendEntryReply{
 				Term: raft.currentTerm,
 			}
-
-			log.Printf("[LEADER] Accept AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
-			reply.Success = true
+			//If any other append entry is detected, reject it
+			log.Printf("[LEADER] Reject AppendEntry from '%v'.\n", raft.peers[ae.LeaderID])
+			reply.Success = false
 			ae.replyChan <- reply
 			break
-			// END OF MODIFY //
+
 			///////////////////
 		}
 	}
